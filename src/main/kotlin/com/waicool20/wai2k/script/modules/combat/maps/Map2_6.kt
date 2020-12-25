@@ -19,31 +19,38 @@
 
 package com.waicool20.wai2k.script.modules.combat.maps
 
-/*
-import com.waicool20.wai2k.android.AndroidRegion
-import com.waicool20.wai2k.config.Wai2KConfig
-import com.waicool20.wai2k.config.Wai2KProfile
-import com.waicool20.wai2k.script.ScriptRunner
-import com.waicool20.wai2k.script.modules.combat.MapRunner
+
+import com.waicool20.wai2k.script.ScriptComponent
+import com.waicool20.wai2k.script.modules.combat.HomographyMapRunner
 import com.waicool20.waicoolutils.logging.loggerFor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
+import kotlin.math.roundToLong
+import kotlin.random.Random
 
-class Map2_6(
-        scriptRunner: ScriptRunner,
-        region: AndroidRegion,
-        config: Wai2KConfig,
-        profile: Wai2KProfile
-) : MapRunner(scriptRunner, region, config, profile) {
+class Map2_6(scriptComponent: ScriptComponent) : HomographyMapRunner(scriptComponent) {
     private val logger = loggerFor<Map2_6>()
-    override val isCorpseDraggingMap = false
 
-    private val commandPostDeployment = COMMAND_POST at region.subRegion(458, 510, 60, 60)
+    override suspend fun begin() {
+        if (gameState.requiresMapInit) {
+            logger.info("Zoom out")
+            repeat(2) {
+                region.pinch(
+                    Random.nextInt(700, 800),
+                    Random.nextInt(250, 340),
+                    0.0,
+                    500
+                )
+                delay(500)
+            }
+            delay((900 * gameState.delayCoefficient).roundToLong())
+            gameState.requiresMapInit = false
+        }
 
-    override suspend fun execute() {
-        deployEchelons(commandPostDeployment)
-        mapRunnerRegions.startOperation.clickRandomly(); yield()
+        val rEchelons = deployEchelons(nodes[0])
+        mapRunnerRegions.startOperation.click(); yield()
         waitForGNKSplash()
-        resupplyEchelons(commandPostDeployment)
+        resupplyEchelons(rEchelons)
         planPath()
         waitForTurnEnd(3)
         handleBattleResults()
@@ -51,13 +58,18 @@ class Map2_6(
 
     private suspend fun planPath() {
         logger.info("Entering planning mode")
-        mapRunnerRegions.planningMode.clickRandomly(); yield()
+        mapRunnerRegions.planningMode.click(); yield()
 
-        logger.info("Selecting node 1")
-        region.subRegion(1205, 165, 60, 60)
-                .clickRandomly(); yield()
+        logger.info("Selecting echelon at ${nodes[0]}")
+        nodes[0].findRegion().click()
+
+        logger.info("Selecting ${nodes[1]}")
+        nodes[1].findRegion().click()
+
+        logger.info("Selecting ${nodes[2]}")
+        nodes[2].findRegion().click(); yield()
 
         logger.info("Executing plan")
-        mapRunnerRegions.executePlan.clickRandomly(); yield()
+        mapRunnerRegions.executePlan.click()
     }
-}*/
+}

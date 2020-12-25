@@ -21,30 +21,25 @@ package com.waicool20.wai2k.script.modules
 
 import com.waicool20.cvauto.android.AndroidRegion
 import com.waicool20.cvauto.core.template.FileTemplate
-import com.waicool20.wai2k.config.Wai2KConfig
-import com.waicool20.wai2k.config.Wai2KProfile
 import com.waicool20.wai2k.game.DollFilterRegions
 import com.waicool20.wai2k.game.TDoll
 import com.waicool20.wai2k.script.ChapterClickFailedException
 import com.waicool20.wai2k.script.Navigator
-import com.waicool20.wai2k.script.ScriptRunner
+import com.waicool20.wai2k.script.ScriptComponent
 import com.waicool20.wai2k.util.Ocr
+import com.waicool20.wai2k.util.YuuBot
+import com.waicool20.wai2k.util.cancelAndYield
 import com.waicool20.wai2k.util.doOCRAndTrim
 import com.waicool20.waicoolutils.filterAsync
 import com.waicool20.waicoolutils.logging.loggerFor
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.*
 import kotlin.coroutines.CoroutineContext
+import kotlin.math.roundToLong
+import kotlin.system.exitProcess
 
 abstract class ScriptModule(
-        protected val scriptRunner: ScriptRunner,
-        protected val region: AndroidRegion,
-        protected val config: Wai2KConfig,
-        protected val profile: Wai2KProfile,
-        protected val navigator: Navigator
-) : CoroutineScope {
+    val navigator: Navigator
+) : ScriptComponent by navigator, CoroutineScope {
     override val coroutineContext: CoroutineContext
         get() = scriptRunner.coroutineContext
 
@@ -91,7 +86,7 @@ abstract class ScriptModule(
         if (stars != null) {
             logger.info("Applying $stars stars filter")
             val unlockedStars = dollFilterRegions.starRegions[6]?.let {
-                Ocr.forConfig(config).doOCRAndTrim(it.subRegion(126, 70, 119, 39))
+                Ocr.forConfig(config).doOCRAndTrim(it.subRegion(92, 70, 28, 39))
             }
             if (unlockedStars?.contains("6") == true) {
                 logger.info("6 star filter is unlocked")
@@ -123,17 +118,17 @@ abstract class ScriptModule(
         val cRegion = region.subRegion(395, 146, 283, 934)
         // Top 1/4 part of lsRegion
         val upperSwipeRegion = cRegion.subRegionAs<AndroidRegion>(
-                cRegion.width / 2 - 15,
-                0,
-                30,
-                cRegion.height / 4
+            cRegion.width / 2 - 15,
+            0,
+            30,
+            cRegion.height / 4
         )
         // Lower 1/4 part of lsRegion
         val lowerSwipeRegion = cRegion.subRegionAs<AndroidRegion>(
-                cRegion.width / 2 - 15,
-                cRegion.height / 4 + cRegion.height / 2,
-                30,
-                cRegion.height / 4
+            cRegion.width / 2 - 15,
+            cRegion.height / 4 + cRegion.height / 2,
+            30,
+            cRegion.height / 4
         )
         var retries = 0
         while (cRegion.doesntHave(FileTemplate("chapters/$chapter.png", CHAPTER_SIMILARITY))) {
@@ -143,11 +138,11 @@ abstract class ScriptModule(
             }
             logger.debug("Visible chapters: $chapters")
             when {
-                chapter <= chapters.min() ?: CHAPTER_MAX / 2 -> {
+                chapter <= chapters.minOrNull() ?: CHAPTER_MAX / 2 -> {
                     logger.debug("Swiping down the chapters")
                     upperSwipeRegion.swipeTo(lowerSwipeRegion)
                 }
-                chapter >= chapters.max() ?: CHAPTER_MAX / 2 + 1 -> {
+                chapter >= chapters.maxOrNull() ?: CHAPTER_MAX / 2 + 1 -> {
                     logger.debug("Swiping up the chapters")
                     lowerSwipeRegion.swipeTo(upperSwipeRegion)
                 }
@@ -155,11 +150,32 @@ abstract class ScriptModule(
             delay(300)
             if (retries++ >= 3) throw ChapterClickFailedException(chapter)
         }
-        navigator.checkLogistics()
-        delay(2000)
+        // Wait for bounce back, usually on top/bottom chapter
+        delay((500 * gameState.delayCoefficient).roundToLong())
         cRegion.subRegion(0, 0, 195, cRegion.height).clickTemplateWhile(
-                template = FileTemplate("chapters/$chapter.png", CHAPTER_SIMILARITY),
-                timeout = 20
+            template = FileTemplate("chapters/$chapter.png", CHAPTER_SIMILARITY),
+            timeout = 20
         ) { has(it) }
+    }
+
+    protected suspend fun stopScript(reason: String) {
+        val msg = """
+            |Script stop condition reached: $reason
+            |Terminating further execution, final script statistics: 
+            |```
+            |${scriptRunner.scriptStats}
+            |```
+            """.trimMargin()
+        logger.info(msg)
+        val wait = Job()
+        if (config.notificationsConfig.onStopCondition) {
+            YuuBot.postMessage(config.apiKey, "Script Terminated", msg) { wait.complete() }
+        }
+        if (profile.stop.exitProgram) {
+            wait.join()
+            exitProcess(0)
+        } else {
+            coroutineContext.cancelAndYield()
+        }
     }
 }

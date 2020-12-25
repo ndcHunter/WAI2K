@@ -34,21 +34,21 @@ import com.waicool20.waicoolutils.logging.loggerFor
 import tornadofx.*
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
-import java.util.jar.JarFile
 
 @JsonNaming(PropertyNamingStrategy.SnakeCaseStrategy::class)
 @JsonIgnoreProperties(ignoreUnknown = true)
 class Wai2KConfig(
-        currentProfile: String = Wai2KProfile.DEFAULT_NAME,
-        assetsDirectory: Path = Wai2K.CONFIG_DIR.resolve("assets"),
-        ocrDirectory: Path = Wai2K.CONFIG_DIR.resolve("tessdata"),
-        clearConsoleOnStart: Boolean = true,
-        showConsoleOnStart: Boolean = true,
-        debugModeEnabled: Boolean = true,
-        lastDeviceSerial: String = "",
-        scriptConfig: ScriptConfig = ScriptConfig(),
-        gameRestartConfig: GameRestartConfig = GameRestartConfig()
+    currentProfile: String = Wai2KProfile.DEFAULT_NAME,
+    assetsDirectory: Path = Wai2K.CONFIG_DIR.resolve("assets"),
+    ocrDirectory: Path = Wai2K.CONFIG_DIR.resolve("tessdata"),
+    clearConsoleOnStart: Boolean = true,
+    showConsoleOnStart: Boolean = true,
+    debugModeEnabled: Boolean = true,
+    lastDeviceSerial: String = "",
+    scriptConfig: ScriptConfig = ScriptConfig(),
+    gameRestartConfig: GameRestartConfig = GameRestartConfig(),
+    apiKey: String = "",
+    notificationsConfig: NotificationsConfig = NotificationsConfig()
 ) {
     private val logger = loggerFor<Wai2K>()
 
@@ -66,6 +66,8 @@ class Wai2KConfig(
     val lastDeviceSerialProperty = lastDeviceSerial.toProperty()
     val scriptConfigProperty = scriptConfig.toProperty()
     val gameRestartConfigProperty = gameRestartConfig.toProperty()
+    val apiKeyProperty = apiKey.toProperty()
+    val notificationsConfigProperty = notificationsConfig.toProperty()
 
     var currentProfile by currentProfileProperty
     @get:JsonIgnore var assetsDirectory by assetsDirectoryProperty
@@ -76,6 +78,8 @@ class Wai2KConfig(
     var lastDeviceSerial by lastDeviceSerialProperty
     var scriptConfig by scriptConfigProperty
     var gameRestartConfig by gameRestartConfigProperty
+    var apiKey by apiKeyProperty
+    var notificationsConfig by notificationsConfigProperty
 
     //</editor-fold>
 
@@ -84,7 +88,7 @@ class Wai2KConfig(
         private val loaderLogger = loggerFor<Loader>()
 
         val requiredOcrFiles = listOf(
-                "eng.traineddata", "osd.traineddata"
+            "eng.traineddata", "osd.traineddata"
         )
 
         val path: Path = Wai2K.CONFIG_DIR.resolve("preferences.json")

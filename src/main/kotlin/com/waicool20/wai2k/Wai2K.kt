@@ -48,6 +48,9 @@ class Wai2K : App(Wai2KWorkspace::class) {
             } catch (t: Throwable) {
                 logger.warn("Could not set locale to C, application may crash if using tesseract 4.0+")
             }
+            // Set inference thread count, anything above 8 seems to be ignored
+            val cores = Runtime.getRuntime().availableProcessors().coerceAtMost(8)
+            CLib.setEnv("OMP_NUM_THREADS", cores.toString(), true)
         }
 
         private fun isRunningJar(): Boolean {
@@ -57,8 +60,8 @@ class Wai2K : App(Wai2KWorkspace::class) {
 
     override fun start(stage: Stage) {
         super.start(stage)
-        find<LoaderView>(params = *arrayOf("parameters" to parameters))
-                .openModal(stageStyle = StageStyle.UNDECORATED)
+        find<LoaderView>(params = arrayOf("parameters" to parameters))
+            .openModal(stageStyle = StageStyle.UNDECORATED)
     }
 
     override fun shouldShowPrimaryStage() = false

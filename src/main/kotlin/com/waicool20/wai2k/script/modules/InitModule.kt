@@ -19,19 +19,14 @@
 
 package com.waicool20.wai2k.script.modules
 
-import boofcv.io.image.UtilImageIO
-import com.waicool20.cvauto.android.AndroidRegion
+import com.waicool20.cvauto.android.AndroidDevice
 import com.waicool20.cvauto.core.Region
 import com.waicool20.cvauto.core.asCachedRegion
 import com.waicool20.cvauto.core.template.FileTemplate
-import com.waicool20.cvauto.util.asGrayF32
-import com.waicool20.wai2k.config.Wai2KConfig
-import com.waicool20.wai2k.config.Wai2KProfile
 import com.waicool20.wai2k.game.LocationId
 import com.waicool20.wai2k.game.LogisticsSupport
 import com.waicool20.wai2k.game.LogisticsSupport.Assignment
 import com.waicool20.wai2k.script.Navigator
-import com.waicool20.wai2k.script.ScriptRunner
 import com.waicool20.wai2k.util.Ocr
 import com.waicool20.wai2k.util.doOCRAndTrim
 import com.waicool20.wai2k.util.formatted
@@ -45,26 +40,33 @@ import java.time.Duration
 import java.time.Instant
 import kotlin.system.measureTimeMillis
 
-class InitModule(
-        scriptRunner: ScriptRunner,
-        region: AndroidRegion,
-        config: Wai2KConfig,
-        profile: Wai2KProfile,
-        navigator: Navigator
-) : ScriptModule(scriptRunner, region, config, profile, navigator) {
+class InitModule(navigator: Navigator) : ScriptModule(navigator) {
     private val logger = loggerFor<InitModule>()
     override suspend fun execute() {
         navigator.checkRequiresRestart()
         navigator.checkLogistics()
-        if (gameState.requiresUpdate) updateGameState()
+        if (gameState.requiresUpdate) {
+            updateGameState()
+            if (profile.logistics.enabled && !profile.combat.enabled) {
+                // Workaround for GFL game freeze at home screen if there are dolls training,
+                // remove when MICA finally fixes this
+                listOf(LocationId.FORMATION, LocationId.COMBAT_MENU)
+                    .random()
+                    .let {
+                        logger.info("Idling @ $it")
+                        navigator.navigateTo(it)
+                    }
+            }
+        }
     }
 
     private suspend fun updateGameState() {
         navigator.navigateTo(LocationId.HOME_STATUS)
         logger.info("Updating gamestate")
+        val region = region.asCachedRegion()
         measureTimeMillis {
-            val repairJob = launch { updateRepairs() }
-            updateLogistics()
+            val repairJob = launch { updateRepairs(region) }
+            updateLogistics(region)
             // Wait for repairs to finish updating if script just started
             if (scriptStats.sortiesDone == 0) repairJob.join()
         }.let { logger.info("Finished updating game state in $it ms") }
@@ -74,35 +76,27 @@ class InitModule(
     /**
      * Updates the logistic support in gamestate
      */
-    private suspend fun updateLogistics() {
+    private suspend fun updateLogistics(cache: Region<AndroidDevice>) {
         logger.info("Reading logistics support status")
-        // Optimize by taking a single screenshot and working on that
-        val image = region.capture()
-        val entry = region.subRegion(422, 0, 240, region.height)
-                .findBest(FileTemplate("init/logistics.png"), 4)
-                .map { it.region }
-                // Map each region to whole logistic support entry
-                .map { image.getSubimage(it.x - 135, it.y - 82, 853, 144) }
-                .map {
-                    listOf(
-                            async {
-                                // Echelon section on the right without the word "Echelon"
-                                Ocr.forConfig(config, digitsOnly = true).doOCRAndTrim(it.getSubimage(0, 25, 83, 100))
-                            },
-                            async {
-                                // Logistics number ie. 1-1
-                                Ocr.forConfig(config).doOCRAndTrim(it.getSubimage(165, 30, 84, 33))
-                            },
-                            async {
-                                // Timer xx:xx:xx
-                                Ocr.forConfig(config).doOCRAndTrim(it.getSubimage(600, 71, 188, 40))
-                            }
-                    )
-                }
-                .map { "${it[0].await()} ${it[1].await()} ${it[2].await()}" }
-                .mapNotNull {
-                    Regex("(\\d+) (\\d\\d?).*?(\\d) (\\d\\d):(\\d\\d):(\\d\\d)").matchEntire(it)?.destructured
-                }
+        val entry = cache.subRegion(422, 0, 240, cache.height)
+            .findBest(FileTemplate("init/logistics.png"), 4)
+            .map { it.region }
+            // Map each region to whole logistic support entry
+            .map { cache.subRegion(it.x - 133, it.y - 87, 852, 115) }
+            .mapAsync {
+                listOf(
+                    // Echelon number
+                    Ocr.forConfig(config, digitsOnly = true).doOCRAndTrim(it.subRegion(0, 25, 80, 90)),
+                    // Logistics number ie. 1-1
+                    Ocr.forConfig(config).doOCRAndTrim(it.subRegion(165, 0, 90, 42)),
+                    // Timer xx:xx:xx
+                    Ocr.forConfig(config).doOCRAndTrim(it.subRegion(600, 70, 190, 42))
+                )
+            }
+            .map { "${it[0]} ${it[1]} ${it[2]}" }
+            .mapNotNull {
+                Regex("(\\d+) (\\d\\d?).*?(\\d) (\\d\\d):(\\d\\d):(\\d\\d)").matchEntire(it)?.destructured
+            }
         // Clear existing timers
         gameState.echelons.forEach { it.logisticsSupportAssignment = null }
         entry.forEach { (sEchelon, sChapter, sNumber, sHour, sMinutes, sSeconds) ->
@@ -118,10 +112,8 @@ class InitModule(
     /**
      * Updates the repair timers in gamestate
      */
-    private suspend fun updateRepairs() {
+    private suspend fun updateRepairs(cache: Region<AndroidDevice>) {
         logger.info("Reading repair status")
-        // Optimize by taking a single screenshot and working on that
-        val cache = region.asCachedRegion()
 
         val firstEntryRegion = cache.subRegion(388, 0, 159, region.height)
         val repairRegions = async {
@@ -138,13 +130,13 @@ class InitModule(
 
         // Map each region to whole logistic support entry
         val mappedEntries = entries.map { it.region }
-                .map { cache.capture().getSubimage(it.x - 109, it.y - 12, 851, 143) }
-                .map {
-                    async {
-                        // Echelon section on the right without the word "Echelon"
-                        Ocr.forConfig(config).doOCRAndTrim(it.getSubimage(10, 25, 65, 100))
-                    } to async { readRepairTimers(it) }
-                }.map { it.first.await().toInt() to it.second.await() }
+            .map { cache.capture().getSubimage(it.x - 109, it.y - 31, 852, 184) }
+            .map {
+                async {
+                    // Echelon number
+                    Ocr.forConfig(config, digitsOnly = true).doOCRAndTrim(it.getSubimage(0, 25, 80, 125))
+                } to async { readRepairTimers(it) }
+            }.map { it.first.await().toInt() to it.second.await() }
 
         // Clear existing timers
         gameState.echelons.flatMap { it.members }.forEach { it.repairEta = null }
@@ -165,13 +157,13 @@ class InitModule(
     private suspend fun readRepairTimers(image: BufferedImage): Map<Int, Duration> {
         return (0 until 5).mapAsync { entry ->
             // Single repair entry without the "Repairing" or "Standby"
-            Ocr.forConfig(config).doOCRAndTrim(image.getSubimage(115 + 145 * entry, 38, 122, 75))
-                    .takeIf { it.contains("Repairing") }
-                    ?.let { timer ->
-                        Regex("(\\d\\d):(\\d\\d):(\\d\\d)").find(timer)?.groupValues?.let {
-                            entry to DurationUtils.of(it[3].toLong(), it[2].toLong(), it[1].toLong())
-                        }
-                    } ?: entry to Duration.ZERO
+            Ocr.forConfig(config).doOCRAndTrim(image.getSubimage(115 + 145 * entry, 66, 122, 75))
+                .takeIf { it.contains("Repairing") }
+                ?.let { timer ->
+                    Regex("(\\d\\d):(\\d\\d):(\\d\\d)").find(timer)?.groupValues?.let {
+                        entry to DurationUtils.of(it[3].toLong(), it[2].toLong(), it[1].toLong())
+                    }
+                } ?: entry to Duration.ZERO
         }.toMap()
     }
 }

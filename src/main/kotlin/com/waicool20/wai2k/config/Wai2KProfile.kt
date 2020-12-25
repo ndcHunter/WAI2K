@@ -42,19 +42,21 @@ import java.time.LocalTime
 @JsonNaming(PropertyNamingStrategy.SnakeCaseStrategy::class)
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class Wai2KProfile(
-        val logistics: Logistics = Logistics(),
-        val combat: Combat = Combat(),
-        val factory: Factory = Factory(),
-        val stop: Stop = Stop()
+    val logistics: Logistics = Logistics(),
+    val combat: Combat = Combat(),
+    val combatReport: CombatReport = CombatReport(),
+    val combatSimulation: CombatSimulation = CombatSimulation(),
+    val factory: Factory = Factory(),
+    val stop: Stop = Stop()
 ) {
     data class DollCriteria(var id: String = "Gr G11")
 
     class Logistics(
-            enabled: Boolean = false,
-            receivalMode: ReceivalMode = ReceivalMode.RANDOM,
-            assignments: MutableMap<Int, ListProperty<Int>> = (1..10).associateWith {
-                SimpleListProperty<Int>(ArrayList<Int>().asObservable())
-            }.toMutableMap()
+        enabled: Boolean = false,
+        receivalMode: ReceivalMode = ReceivalMode.RANDOM,
+        assignments: MutableMap<Int, ListProperty<Int>> = (1..10).associateWith {
+            SimpleListProperty<Int>(ArrayList<Int>().asObservable())
+        }.toMutableMap()
     ) {
         enum class ReceivalMode {
             ALWAYS_CONTINUE, RANDOM, ALWAYS_CANCEL
@@ -69,30 +71,72 @@ data class Wai2KProfile(
     }
 
     class Combat(
-            enabled: Boolean = false,
-            map: String = "0-2",
-            repairThreshold: Int = 40,
-            draggers: MutableList<DollCriteria> = mutableListOf(DollCriteria(), DollCriteria())
+        enabled: Boolean = false,
+        map: String = "0-2",
+        repairThreshold: Int = 40,
+        battleTimeout: Int = 45,
+        enableOneClickRepair: Boolean = true,
+        draggers: MutableList<DollCriteria> = mutableListOf(DollCriteria(), DollCriteria())
     ) {
         val enabledProperty = enabled.toProperty()
         val mapProperty = map.toProperty()
         val repairThresholdProperty = repairThreshold.toProperty()
+        val battleTimeoutProperty = battleTimeout.toProperty()
+        val enableOneClickRepairProperty = enableOneClickRepair.toProperty()
         val draggersProperty = draggers.toProperty()
 
         val enabled by enabledProperty
         val map by mapProperty
         val repairThreshold by repairThresholdProperty
+        val battleTimeout by battleTimeoutProperty
+        val enableOneClickRepair by enableOneClickRepairProperty
         val draggers by draggersProperty
     }
 
+    class CombatReport(enabled: Boolean = false, type: Type = Type.SPECIAL) {
+        enum class Type {
+            NORMAL, SPECIAL
+        }
+
+        val enabledProperty = enabled.toProperty()
+        val typeProperty = type.toProperty()
+
+        val enabled by enabledProperty
+        val type by typeProperty
+    }
+
+    class CombatSimulation(
+        enabled: Boolean = false,
+        dataSim: Level = Level.ADVANCED,
+        neuralFragment: Level = Level.ADVANCED,
+        neuralEchelon: Int = 6
+
+    ) {
+        enum class Level {
+            OFF, BASIC, INTERMEDIATE, ADVANCED;
+
+            val cost = ordinal
+        }
+
+        val enabledProperty = enabled.toProperty()
+        val dataSimProperty = dataSim.toProperty()
+        val neuralFragmentProperty = neuralFragment.toProperty()
+        val neuralEchelonProperty = neuralEchelon.toProperty()
+
+        val enabled by enabledProperty
+        val dataSim by dataSimProperty
+        val neuralFragment by neuralFragmentProperty
+        val neuralEchelon by neuralEchelonProperty
+    }
+
     class Factory(
-            enhancement: Enhancement = Enhancement(),
-            disassembly: Disassembly = Disassembly(),
-            alwaysDisassembleAfterEnhance: Boolean = true,
-            equipDisassembly: EquipDisassembly = EquipDisassembly()
+        enhancement: Enhancement = Enhancement(),
+        disassembly: Disassembly = Disassembly(),
+        alwaysDisassembleAfterEnhance: Boolean = true,
+        equipDisassembly: EquipDisassembly = EquipDisassembly()
     ) {
         class Enhancement(
-                enabled: Boolean = true
+            enabled: Boolean = true
         ) {
             val enabledProperty = enabled.toProperty()
 
@@ -100,7 +144,7 @@ data class Wai2KProfile(
         }
 
         class Disassembly(
-                enabled: Boolean = false
+            enabled: Boolean = false
         ) {
             val enabledProperty = enabled.toProperty()
 
@@ -118,11 +162,14 @@ data class Wai2KProfile(
         // Equipment ----------
 
         class EquipDisassembly(
-                enabled: Boolean = true
+            enabled: Boolean = true,
+            disassemble4Star: Boolean = false
         ) {
             val enabledProperty = enabled.toProperty()
+            val disassemble4StarProperty = disassemble4Star.toProperty()
 
             val enabled by enabledProperty
+            val disassemble4Star by disassemble4StarProperty
         }
 
         val equipDisassemblyProperty = equipDisassembly.toProperty()
@@ -131,22 +178,23 @@ data class Wai2KProfile(
     }
 
     class Stop(
-            enabled: Boolean = false,
-            exitProgram: Boolean = false,
-            time: Time = Time()
+        enabled: Boolean = false,
+        exitProgram: Boolean = false,
+        time: Time = Time(),
+        count: Count = Count()
     ) {
-        enum class Mode {
-            ELAPSED_TIME, SPECIFIC_TIME, COUNT
-        }
-
         class Time(
-                enabled: Boolean = true,
-                mode: Mode = Mode.ELAPSED_TIME,
-                @JsonFormat(shape = JsonFormat.Shape.STRING)
-                elapsedTime: Duration = Duration.ofHours(8),
-                @JsonFormat(pattern = "HH:mm")
-                specificTime: LocalTime = LocalTime.of(0, 0)
+            enabled: Boolean = true,
+            mode: Mode = Mode.ELAPSED_TIME,
+            @JsonFormat(shape = JsonFormat.Shape.STRING)
+            elapsedTime: Duration = Duration.ofHours(8),
+            @JsonFormat(pattern = "HH:mm")
+            specificTime: LocalTime = LocalTime.of(0, 0)
         ) {
+            enum class Mode {
+                ELAPSED_TIME, SPECIFIC_TIME
+            }
+
             val enabledProperty = enabled.toProperty()
             val modeProperty = mode.toProperty()
             val elapsedTimeProperty = elapsedTime.toProperty()
@@ -158,28 +206,43 @@ data class Wai2KProfile(
             var specificTime by specificTimeProperty
         }
 
+        class Count(
+            enabled: Boolean = false,
+            sorties: Int = 10
+        ) {
+            val enabledProperty = enabled.toProperty()
+            val sortiesProperty = sorties.toProperty()
+
+            var enabled by enabledProperty
+            var sorties by sortiesProperty
+        }
+
         val enabledProperty = enabled.toProperty()
         val exitProgramProperty = exitProgram.toProperty()
         val timeProperty = time.toProperty()
+        val countProperty = count.toProperty()
 
         var enabled by enabledProperty
         var exitProgram by exitProgramProperty
         var time by timeProperty
+        var count by countProperty
     }
 
     companion object Loader {
         private val loaderLogger = loggerFor<Loader>()
         private val mapper = fxJacksonObjectMapper()
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-                .registerModule(JavaTimeModule())
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+            .registerModule(JavaTimeModule())
         val PROFILE_DIR: Path = Wai2K.CONFIG_DIR.resolve("profiles")
         const val DEFAULT_NAME = "Default"
 
         fun profileExists(name: String) = Files.exists(PROFILE_DIR.resolve("$name${Wai2K.CONFIG_SUFFIX}"))
 
         fun load(name: String): Wai2KProfile {
-            return load(PROFILE_DIR.resolve("${name.takeIf { it.isNotBlank() }
-                    ?: DEFAULT_NAME}${Wai2K.CONFIG_SUFFIX}")).also { it.name = name }
+            return load(PROFILE_DIR.resolve("${
+                name.takeIf { it.isNotBlank() }
+                    ?: DEFAULT_NAME
+            }${Wai2K.CONFIG_SUFFIX}")).also { it.name = name }
         }
 
         fun load(path: Path): Wai2KProfile {

@@ -19,5 +19,6 @@
 
 rootProject.name = "WAI2K"
 
+includeBuild("./launcher")
 includeBuild("./waicoolUtils")
 includeBuild("./CVAuto")

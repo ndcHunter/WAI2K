@@ -19,32 +19,20 @@
 
 package com.waicool20.wai2k.script.modules.combat.maps
 
-import com.waicool20.cvauto.android.AndroidRegion
-import com.waicool20.wai2k.config.Wai2KConfig
-import com.waicool20.wai2k.config.Wai2KProfile
-import com.waicool20.wai2k.script.ScriptRunner
-import com.waicool20.wai2k.script.modules.combat.MapRunner
+import com.waicool20.wai2k.script.ScriptComponent
+import com.waicool20.wai2k.script.modules.combat.AbsoluteMapRunner
+import com.waicool20.wai2k.script.modules.combat.CorpseDragging
 import com.waicool20.waicoolutils.logging.loggerFor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
-import kotlin.random.Random
+import kotlin.math.roundToLong
 
-class Map11_5(
-        scriptRunner: ScriptRunner,
-        region: AndroidRegion,
-        config: Wai2KConfig,
-        profile: Wai2KProfile
-) : MapRunner(scriptRunner, region, config, profile) {
+class Map11_5(scriptComponent: ScriptComponent) : AbsoluteMapRunner(scriptComponent), CorpseDragging {
     private val logger = loggerFor<Map11_5>()
-    override val isCorpseDraggingMap = true
 
-    // Too much blue in this map
-    override val extractBlueNodes = false
-    override val extractYellowNodes = false
-
-    override suspend fun execute() {
-
-        // No need to zoom
+    override suspend fun begin() {
+        // No need to zoom, delay for map lag
+        delay((1000 * gameState.delayCoefficient).roundToLong())
         val rEchelons = deployEchelons(nodes[1], nodes[0])
         // Dummy do not supply
         deployEchelons(nodes[2])
@@ -54,8 +42,9 @@ class Map11_5(
         retreatEchelons(nodes[0])
         planPath()
         // Wait for team to move all the way
-        waitForTurnAndPoints(1, 0 , false)
-        retreatEchelons(nodes[0])       
+        waitForTurnEnd(5, false); delay(1000)
+        waitForTurnAndPoints(1, 0, false); delay(1000)
+        retreatEchelons(nodes[0])
         terminateMission()
     }
 

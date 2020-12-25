@@ -19,121 +19,87 @@
 
 package com.waicool20.wai2k.script.modules.combat.maps
 
-import com.waicool20.cvauto.android.AndroidRegion
 import com.waicool20.cvauto.core.template.FileTemplate
-import com.waicool20.wai2k.config.Wai2KConfig
-import com.waicool20.wai2k.config.Wai2KProfile
-import com.waicool20.wai2k.script.ScriptRunner
-import com.waicool20.wai2k.script.modules.combat.MapRunner
-import com.waicool20.wai2k.util.Ocr
-import com.waicool20.wai2k.util.doOCRAndTrim
-import com.waicool20.waicoolutils.binarizeImage
+import com.waicool20.wai2k.script.ScriptComponent
+import com.waicool20.wai2k.script.modules.combat.HomographyMapRunner
 import com.waicool20.waicoolutils.logging.loggerFor
-import com.waicool20.waicoolutils.pad
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.yield
-import java.awt.Color
-import kotlin.math.abs
+import kotlin.math.roundToLong
 import kotlin.random.Random
 
-class Map4_6_Data(
-        scriptRunner: ScriptRunner,
-        region: AndroidRegion,
-        config: Wai2KConfig,
-        profile: Wai2KProfile
-) : MapRunner(scriptRunner, region, config, profile) {
+class Map4_6_Data(scriptComponent: ScriptComponent) : HomographyMapRunner(scriptComponent) {
     private val logger = loggerFor<Map4_6>()
-    override val isCorpseDraggingMap = false
+
+    // Maybe have this as an option for regular 4-6
     //Allow interruption of waiting for turn if necessary
-    private var combatComplete=false
+    private var combatComplete = false
 
-
-
-    override suspend fun execute() {
+    override suspend fun begin() {
         if (gameState.requiresMapInit) {
             logger.info("Zoom out")
             repeat(2) {
                 region.pinch(
-                        Random.nextInt(700, 800),
-                        Random.nextInt(300, 400),
-                        0.0,
-                        500
+                    Random.nextInt(700, 800),
+                    Random.nextInt(300, 400),
+                    0.0,
+                    500
                 )
-                delay(200)
+                delay(500)
             }
-            //pan down
-            val r = region.subRegionAs<AndroidRegion>(998, 624, 100, 30)
-            r.swipeTo(r.copy(y = r.y - 400))
-            delay(500)
-            deployEchelons(nodes[5])
+            delay((900 * gameState.delayCoefficient).roundToLong())
             gameState.requiresMapInit = false
         }
-        else{
-            nodes[0].findRegion()
-            deployEchelons(nodes[0])
-        }
-        // pan up
-        val r = region.subRegionAs<AndroidRegion>(1058, 224, 100, 22)
-        repeat(2) {
-            r.swipeTo(r.copy(y = r.y + 450))
-            delay(200)
-        }
 
-        val rEchelons = deployEchelons(nodes[1])
+        // Will probably get get stuck if ? nodes reduce you manpower to 0
+        deployEchelons(nodes[0], nodes[1])
         mapRunnerRegions.startOperation.click(); yield()
         waitForGNKSplash()
-        onEnterBattleListener={
-            isWaitInterrupted=true
-            logger.info("Postmortem: battle detected")
-            mapRunnerRegions.pauseButton.click()
-            delay(1000)
-            mapRunnerRegions.retreatCombat.click()
-        }
-        onFinishBattleListener={
-            combatComplete=true
-        }
         planPath()
-        waitForTurnAndPoints(1,0,false)
-        if(isWaitInterrupted){
-            while(!combatComplete)
-            delay(1000)
+
+        // If you get ambushed on the final ? node waitForTurnAndPoints() can be satisfied
+        // As the "You have been ambushed popup is there with a delay to get into battle
+        waitForTurnAssets(listOf(FileTemplate("combat/battle/plan.png", 0.96)), false)
+        if (interruptWaitFlag) {
+            while (!combatComplete) delay(1000)
         }
 
-        delay(2000)
-
-        isWaitInterrupted=false
+        interruptWaitFlag = false
         terminateMission()
+    }
 
+    override suspend fun onEnterBattleListener() {
+        interruptWaitFlag = true
+        logger.info("Postmortem: battle detected")
+        mapRunnerRegions.pauseButton.click()
+        delay(1000)
+        mapRunnerRegions.retreatCombat.click()
+    }
+
+    override suspend fun onFinishBattleListener() {
+        combatComplete = true
     }
 
     private suspend fun planPath() {
-        nodes[2].findRegion().click()
-
-        logger.info("Selecting echelon at ${nodes[5]}")
-        nodes[5].findRegion().click()
-
         logger.info("Entering planning mode")
         mapRunnerRegions.planningMode.click(); yield()
 
-        logger.info("Selecting ${nodes[6]}")
-        nodes[6].findRegion().click(); yield()
+        logger.info("Selecting echelon at ${nodes[0]}")
+        nodes[0].findRegion().click()
 
-        if(Random.nextInt(0,100)%2==0){
-            logger.info("Selecting ${nodes[7]}")
-            nodes[7].findRegion().click(); yield()
+        if (Random.nextBoolean()) {
+            logger.info("Selecting ${nodes[3]}")
+            nodes[3].findRegion().click(); yield()
 
-            logger.info("Selecting ${nodes[8]}")
-            nodes[8].findRegion().click(); yield()
+            logger.info("Selecting ${nodes[4]}")
+            nodes[4].findRegion().click(); yield()
+        } else {
+            logger.info("Selecting ${nodes[4]}")
+            nodes[4].findRegion().click(); yield()
+
+            logger.info("Selecting ${nodes[3]}")
+            nodes[3].findRegion().click(); yield()
         }
-        else{
-            logger.info("Selecting ${nodes[8]}")
-            nodes[8].findRegion().click(); yield()
-
-            logger.info("Selecting ${nodes[7]}")
-            nodes[7].findRegion().click(); yield()
-        }
-
 
         logger.info("Executing plan")
         mapRunnerRegions.executePlan.click()

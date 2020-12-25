@@ -23,22 +23,14 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import java.awt.Rectangle
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-sealed class MapNode(
-        val x: Int,
-        val y: Int,
-        val width: Int,
-        val height: Int,
-        val type: Type = Type.Normal
-) {
+data class MapNode(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+    val type: Type = Type.Normal
+): Deployable, Retreatable {
     enum class Type { Normal, CommandPost, Heliport, HeavyHeliport }
-
-    class RelativeMapNode(x: Int, y: Int, width: Int, height: Int) : MapNode(x, y, width, height) {
-        override fun toString() = "RelativeMapNode(x=$x, y=$y, width=$width, height=$height, type=$type)"
-    }
-
-    class AbsoluteMapNode(x: Int, y: Int, width: Int, height: Int) : MapNode(x, y, width, height) {
-        override fun toString() = "AbsoluteMapNode(x=$x, y=$y, width=$width, height=$height, type=$type)"
-    }
 
     val rect by lazy { Rectangle(x, y, width, height) }
 }

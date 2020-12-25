@@ -33,15 +33,16 @@ import javafx.scene.control.ComboBox
 import javafx.scene.control.Label
 import javafx.scene.image.ImageView
 import javafx.scene.layout.VBox
+import javafx.stage.DirectoryChooser
 import javafx.stage.FileChooser
 import javafx.util.StringConverter
 import kotlinx.coroutines.*
 import org.controlsfx.glyphfont.FontAwesome
 import org.controlsfx.glyphfont.Glyph
 import tornadofx.*
-import java.awt.image.BufferedImage
-import java.lang.Exception
+import java.io.File
 import javax.imageio.ImageIO
+import kotlin.system.measureTimeMillis
 
 class DeviceTabView : CoroutineScopeView(), Binder {
     override val root: VBox by fxml("/views/tabs/device-tab.fxml")
@@ -53,12 +54,17 @@ class DeviceTabView : CoroutineScopeView(), Binder {
     private val displayLabel: Label by fxid()
     private val deviceComboBox: ComboBox<AndroidDevice> by fxid()
     private val reloadDevicesButton: Button by fxid()
+    private val touchesButton: Button by fxid()
     private val pointerButton: Button by fxid()
     private val takeScreenshotButton: Button by fxid()
+    private val captureSeriesButton: Button by fxid()
+    private val testLatencyButton: Button by fxid()
 
     private val realtimePreviewCheckbox: CheckBox by fxid()
     private val deviceView: ImageView by fxid()
     private var renderJob: Job? = null
+    private var capturingJob: Job? = null
+    private var lastDir: File? = null
 
     private val context: Wai2KContext by inject()
 
@@ -72,13 +78,11 @@ class DeviceTabView : CoroutineScopeView(), Binder {
         reloadDevicesButton.setOnAction {
             refreshDeviceLists()
             if (renderJob?.isActive == false) {
-                deviceComboBox.selectedItem?.let {
-                    renderJob = createNewRenderJob(it)
-                }
+                createNewRenderJob(deviceComboBox.selectedItem ?: return@setOnAction)
             }
         }
         deviceComboBox.converter = object : StringConverter<AndroidDevice>() {
-            override fun toString(device: AndroidDevice) = device.properties.name
+            override fun toString(device: AndroidDevice?) = device?.properties?.name ?: "No device selected"
             override fun fromString(string: String) = null
         }
 
@@ -94,26 +98,29 @@ class DeviceTabView : CoroutineScopeView(), Binder {
     override fun createBindings() {
         val itemProp = deviceComboBox.selectionModel.selectedItemProperty()
         androidVersionLabel.textProperty().bind(
-                itemProp.stringBinding { it?.properties?.androidVersion ?: "" }
+            itemProp.stringBinding { it?.properties?.androidVersion ?: "" }
         )
         brandLabel.textProperty().bind(
-                itemProp.stringBinding { it?.properties?.brand ?: "" }
+            itemProp.stringBinding { it?.properties?.brand ?: "" }
         )
         manufacturerLabel.bind(
-                itemProp.stringBinding { it?.properties?.manufacturer ?: "" }
+            itemProp.stringBinding { it?.properties?.manufacturer ?: "" }
         )
         modelLabel.bind(
-                itemProp.stringBinding { it?.properties?.model ?: "" }
+            itemProp.stringBinding { it?.properties?.model ?: "" }
         )
         serialLabel.bind(
-                itemProp.stringBinding { it?.serial ?: "" }
+            itemProp.stringBinding { it?.serial ?: "" }
         )
         displayLabel.textProperty().bind(
-                itemProp.stringBinding {
-                    it?.properties?.run { "${displayWidth}x$displayHeight" } ?: ""
-                }
+            itemProp.stringBinding {
+                it?.properties?.run { "${displayWidth}x$displayHeight" } ?: ""
+            }
         )
         itemProp.addListener("AndroidDeviceSelection", ::setNewDevice)
+        touchesButton.action {
+            deviceComboBox.selectedItem?.toggleTouches()
+        }
         pointerButton.action {
             deviceComboBox.selectedItem?.togglePointerInfo()
         }
@@ -128,9 +135,53 @@ class DeviceTabView : CoroutineScopeView(), Binder {
                 }
             }
         }
+        captureSeriesButton.action {
+            val device = deviceComboBox.selectedItem ?: return@action
+            if (capturingJob == null) {
+                val dir = DirectoryChooser().apply {
+                    title = "Save screenshots to?"
+                    lastDir?.let { initialDirectory = it }
+                }.showDialog(null) ?: return@action
+                lastDir = dir
+                captureSeriesButton.text = "Capture Series Stop"
+                capturingJob = launch(Dispatchers.IO) {
+                    while (isActive) {
+                        val out = dir.resolve("${System.currentTimeMillis()}.png")
+                        ImageIO.write(device.screens[0].capture(), "PNG", out)
+                        logger.info("Saved $out")
+                    }
+                }
+            } else {
+                capturingJob?.cancel()
+                capturingJob = null
+                captureSeriesButton.text = "Capture Series Start"
+            }
+        }
+        testLatencyButton.action {
+            launch(Dispatchers.IO) {
+                renderJob?.cancelAndJoin()
+                val device = deviceComboBox.selectedItem ?: return@launch
+                logger.info("Testing capture latency")
+                val times = 10
+                var total = 0L
+                repeat(times) {
+                    val time = measureTimeMillis { device.screens[0].capture() }
+                    delay(100)
+                    logger.info("Capture $it: $time ms")
+                    total += time
+                }
+                logger.info("Average: ${total / times} ms")
+                createNewRenderJob(device)
+            }
+        }
         context.wai2KConfig.scriptConfig.fastScreenshotModeProperty.addListener("DeviceTabViewFSMListener") { newVal ->
             deviceComboBox.selectedItem?.screens?.firstOrNull()?.fastCaptureMode = newVal
         }
+    }
+
+    override fun onTabSelected() {
+        super.onTabSelected()
+        createNewRenderJob(deviceComboBox.selectedItem ?: return)
     }
 
     private fun refreshDeviceLists(action: (List<AndroidDevice>) -> Unit = {}) {
@@ -157,33 +208,31 @@ class DeviceTabView : CoroutineScopeView(), Binder {
             context.wai2KConfig.save()
             device.screens[0].fastCaptureMode = context.wai2KConfig.scriptConfig.fastScreenshotMode
             // Cancel the current job before starting a new one
-            renderJob?.cancel()
-            renderJob = createNewRenderJob(device)
+            createNewRenderJob(device)
         }
     }
 
-    private fun createNewRenderJob(device: AndroidDevice): Job {
-        return launch(Dispatchers.IO + CoroutineName("Device Tab Render Job")) {
+    private fun createNewRenderJob(device: AndroidDevice) {
+        renderJob?.cancel()
+        renderJob = launch(Dispatchers.IO + CoroutineName("Device Tab Render Job")) {
             var lastCaptureTime = System.currentTimeMillis()
-            while (isActive) {
+            while (isActive && owningTab?.isSelected == true) {
                 try {
-                    if (owningTab?.isSelected == true) {
-                        val image = if (realtimePreviewCheckbox.isSelected && device.screens[0].fastCaptureMode) {
+                    val image = if (realtimePreviewCheckbox.isSelected && device.screens[0].fastCaptureMode) {
+                        device.screens[0].capture()
+                    } else {
+                        device.screens[0].getLastScreenCapture()?.takeIf {
+                            System.currentTimeMillis() - lastCaptureTime < 3000
+                        } ?: run {
+                            lastCaptureTime = System.currentTimeMillis()
                             device.screens[0].capture()
-                        } else {
-                            device.screens[0].getLastScreenCapture()?.takeIf {
-                                System.currentTimeMillis() - lastCaptureTime < 3000
-                            } ?: run {
-                                lastCaptureTime = System.currentTimeMillis()
-                                device.screens[0].capture()
-                            }
-                        }
-                        withContext(Dispatchers.Main) {
-                            deviceView.image = SwingFXUtils.toFXImage(image, null)
                         }
                     }
+                    withContext(Dispatchers.Main) {
+                        deviceView.image = SwingFXUtils.toFXImage(image, null)
+                    }
                 } catch (e: Exception) {
-                    logger.warn("Failed to get frame for device $device")
+                    logger.warn("Failed to get frame for device $device", e)
                     break
                 }
             }

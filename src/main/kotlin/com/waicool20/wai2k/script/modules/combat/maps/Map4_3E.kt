@@ -18,35 +18,41 @@
  */
 
 package com.waicool20.wai2k.script.modules.combat.maps
-/*
 
-import com.waicool20.wai2k.android.AndroidRegion
-import com.waicool20.wai2k.config.Wai2KConfig
-import com.waicool20.wai2k.config.Wai2KProfile
-import com.waicool20.wai2k.script.ScriptRunner
-import com.waicool20.wai2k.script.modules.combat.MapRunner
+
+import com.waicool20.cvauto.core.template.FileTemplate
+import com.waicool20.wai2k.script.ScriptComponent
+import com.waicool20.wai2k.script.modules.combat.HomographyMapRunner
 import com.waicool20.waicoolutils.logging.loggerFor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
+import kotlin.math.roundToLong
+import kotlin.random.Random
 
-class Map4_3E(
-        scriptRunner: ScriptRunner,
-        region: AndroidRegion,
-        config: Wai2KConfig,
-        profile: Wai2KProfile
-) : MapRunner(scriptRunner, region, config, profile) {
+class Map4_3E(scriptComponent: ScriptComponent) : HomographyMapRunner(scriptComponent) {
     private val logger = loggerFor<Map4_3E>()
-    override val isCorpseDraggingMap = true
 
-    private val heliportDeployment = HELIPORT at region.subRegion(1788, 723, 60, 60)
-    private val commandPostDeployment = COMMAND_POST at region.subRegion(320, 489, 103, 113)
+    override suspend fun begin() {
+        if (gameState.requiresMapInit) {
+            logger.info("Zoom out")
+            repeat(2) {
+                region.pinch(
+                    Random.nextInt(700, 800),
+                    Random.nextInt(250, 340),
+                    0.0,
+                    500
+                )
+                delay(500)
+            }
+            delay((900 * gameState.delayCoefficient).roundToLong())
+            gameState.requiresMapInit = false
+        }
 
-
-    override suspend fun execute() {
-        deployEchelons(heliportDeployment, commandPostDeployment)
-        mapRunnerRegions.startOperation.clickRandomly(); yield()
+        val rEchelons = deployEchelons(nodes[0])
+        deployEchelons(nodes[1])
+        mapRunnerRegions.startOperation.click(); yield()
         waitForGNKSplash()
-        resupplyEchelons(commandPostDeployment)
+        resupplyEchelons(rEchelons)
         planPath()
         waitForTurnEnd(4)
         handleBattleResults()
@@ -54,30 +60,15 @@ class Map4_3E(
 
     private suspend fun planPath() {
         logger.info("Entering planning mode")
-        mapRunnerRegions.planningMode.clickRandomly(); yield()
-        logger.info("Selecting echelon at heliport")
-        region.subRegion(1788, 723, 60, 60)
-                .clickRandomly(); yield()
-        logger.info("Selecting node 1")
-        region.subRegion(1766, 464, 60, 60)
-                .clickRandomly(); yield()
-        logger.info("Selecting node 2")
-        region.subRegion(1863, 197, 60, 60)
-                .clickRandomly(); yield()
+        mapRunnerRegions.planningMode.click(); yield()
 
-        // Pan up
-        region.subRegion(1033, 150, 240, 50).randomLocation().let {
-            region.swipeRandomly(it, it.offset(0, 850), 800)
-            delay(300)
-        }
+        logger.info("Selecting ${nodes[0]}")
+        nodes[0].findRegion().click()
 
-        logger.info("Selecting node 3")
-        region.subRegion(1708, 726, 60, 60)
-                .clickRandomly(); yield()
-        logger.info("Selecting node 4")
-        region.subRegion(1731, 368, 60, 60)
-                .clickRandomly(); yield()
+        logger.info("Selecting ${nodes[2]}")
+        nodes[2].findRegion().click()
+
         logger.info("Executing plan")
-        mapRunnerRegions.executePlan.clickRandomly(); yield()
+        mapRunnerRegions.executePlan.click()
     }
-}*/
+}

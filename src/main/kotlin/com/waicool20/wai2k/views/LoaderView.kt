@@ -19,6 +19,7 @@
 
 package com.waicool20.wai2k.views
 
+import ai.djl.Device
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.waicool20.cvauto.android.ADB
@@ -29,16 +30,16 @@ import com.waicool20.wai2k.config.Wai2KContext
 import com.waicool20.wai2k.config.Wai2KProfile
 import com.waicool20.wai2k.script.ScriptContext
 import com.waicool20.wai2k.script.ScriptRunner
-import com.waicool20.waicoolutils.SikuliXLoader
+import com.waicool20.wai2k.util.ai.ModelLoader
 import com.waicool20.waicoolutils.javafx.CoroutineScopeView
 import com.waicool20.waicoolutils.logging.LoggingEventBus
 import com.waicool20.waicoolutils.logging.loggerFor
 import javafx.application.Application
 import javafx.scene.control.Label
 import javafx.scene.layout.AnchorPane
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import tornadofx.*
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -60,12 +61,14 @@ class LoaderView : CoroutineScopeView() {
 
     override fun onDock() {
         super.onDock()
-        startStatusListener()
-        find<ConsoleView>()
-        parseVersion()
-        logger.info("Starting WAI2K ${context.versionInfo.version}")
-        logger.info("Config directory: ${Wai2K.CONFIG_DIR}")
-        startLoading()
+        launch(Dispatchers.IO) {
+            startStatusListener()
+            find<ConsoleView>()
+            parseVersion()
+            logger.info("Starting WAI2K ${context.versionInfo.version}")
+            logger.info("Config directory: ${Wai2K.CONFIG_DIR}")
+            startLoading()
+        }
     }
 
     private fun startStatusListener() {
@@ -85,9 +88,8 @@ class LoaderView : CoroutineScopeView() {
         loadWai2KProfile()
         loadScriptRunner()
         FileTemplate.checkPaths.add(wai2KConfig.assetsDirectory)
-        launch(Dispatchers.Default) {
-            closeAndShowMainApp()
-        }
+        loadAI()
+        closeAndShowMainApp()
     }
 
     private fun loadADB() {
@@ -99,7 +101,26 @@ class LoaderView : CoroutineScopeView() {
         wai2KConfig = Wai2KConfig.load()
         parseCommandLine()
         if (!wai2KConfig.isValid) {
-            find<InitialConfigurationView>().openModal(owner = currentWindow, block = true)
+            Files.createDirectories(wai2KConfig.ocrDirectory)
+            val client = OkHttpClient()
+            runBlocking {
+                coroutineScope {
+                    Wai2KConfig.requiredOcrFiles.forEach { file ->
+                        launch(Dispatchers.IO) {
+                            val url = "https://github.com/tesseract-ocr/tessdata/blob/master/$file?raw=true"
+                            logger.info("Downloading $file")
+                            val request = Request.Builder().url(url).build()
+                            val response = client.newCall(request).execute()
+                            val input = response.body!!.byteStream()
+                            val output = Files.newOutputStream(wai2KConfig.ocrDirectory.resolve(file))
+                            input.copyTo(output)
+                            input.close()
+                            output.close()
+                            logger.info("Done downloading: $file")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -109,6 +130,19 @@ class LoaderView : CoroutineScopeView() {
 
     private fun loadScriptRunner() {
         setInScope(ScriptContext(ScriptRunner(wai2KConfig, currentProfile)))
+    }
+
+    private fun loadAI() {
+        logger.info("Loading detection model...")
+        val gpus = Device.getGpuCount()
+        val device = if (gpus > 0) {
+            logger.info("Detected GPUs: $gpus")
+            Device.gpu()
+        } else {
+            logger.info("No GPU detected, make sure you have CUDA 10 installed, using CPU")
+            Device.cpu()
+        }
+        ModelLoader.engine.newModel("Loading", device).close()
     }
 
     private fun parseCommandLine() {

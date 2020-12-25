@@ -25,6 +25,7 @@ import com.waicool20.cvauto.android.ADB
 import com.waicool20.cvauto.android.AndroidDevice
 import com.waicool20.cvauto.core.Region
 import com.waicool20.cvauto.core.template.FileTemplate
+import com.waicool20.wai2k.Wai2K
 import com.waicool20.wai2k.android.ProcessManager
 import com.waicool20.wai2k.config.Wai2KConfig
 import com.waicool20.wai2k.config.Wai2KProfile
@@ -33,30 +34,35 @@ import com.waicool20.wai2k.script.modules.InitModule
 import com.waicool20.wai2k.script.modules.ScriptModule
 import com.waicool20.wai2k.script.modules.StopModule
 import com.waicool20.wai2k.util.Ocr
+import com.waicool20.wai2k.util.YuuBot
 import com.waicool20.wai2k.util.cancelAndYield
 import com.waicool20.wai2k.util.doOCRAndTrim
 import com.waicool20.waicoolutils.distanceTo
 import com.waicool20.waicoolutils.logging.loggerFor
 import kotlinx.coroutines.*
 import org.reflections.Reflections
+import java.nio.file.Files
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import javax.imageio.ImageIO
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.roundToLong
 import kotlin.reflect.full.primaryConstructor
 
 class ScriptRunner(
-        wai2KConfig: Wai2KConfig = Wai2KConfig(),
-        wai2KProfile: Wai2KProfile = Wai2KProfile()
+    wai2KConfig: Wai2KConfig = Wai2KConfig(),
+    wai2KProfile: Wai2KProfile = Wai2KProfile()
 ) : CoroutineScope {
     companion object {
         const val NORMAL_RES = 480
-        const val HIGH_RES = 720
+        const val HIGH_RES = 1080
     }
 
     private var scriptJob: Job? = null
     override val coroutineContext: CoroutineContext
         get() = scriptJob?.takeIf { it.isActive }?.let { it + Dispatchers.Default }
-                ?: Dispatchers.Default
+            ?: Dispatchers.Default
 
     private val logger = loggerFor<ScriptRunner>()
     private var currentDevice: AndroidDevice? = null
@@ -75,6 +81,8 @@ class ScriptRunner(
     var lastStartTime: Instant? = null
         private set
 
+    private var statsHash: Int = scriptStats.hashCode()
+
     init {
         // Turn off logging for reflections library
         (loggerFor<Reflections>() as Logger).level = Level.OFF
@@ -90,10 +98,12 @@ class ScriptRunner(
         gameState.requiresUpdate = true
         lastStartTime = Instant.now()
         scriptStats.reset()
+        statsHash = scriptStats.hashCode()
         gameState.reset()
         justRestarted = true
         scriptJob = launch {
             reload(true)
+            postStats()
             while (isActive) {
                 runScriptCycle()
             }
@@ -120,7 +130,9 @@ class ScriptRunner(
             currentDevice?.input?.touchInterface?.settings?.postTapDelay = (mouseDelay * 1000).roundToLong()
         }
 
-        currentDevice = ADB.getDevices().find { it.serial == currentConfig.lastDeviceSerial }
+        if (currentDevice == null || currentDevice?.serial != currentConfig.lastDeviceSerial) {
+            currentDevice = ADB.getDevices().find { it.serial == currentConfig.lastDeviceSerial }
+        }
         val region = currentDevice?.screens?.firstOrNull() ?: run {
             logger.info("Could not start due to invalid device")
             return
@@ -130,16 +142,14 @@ class ScriptRunner(
             modules.clear()
             val nav = Navigator(this, region, currentConfig, currentProfile)
             navigator = nav
-            modules.add(InitModule(this, region, currentConfig, currentProfile, nav))
+            modules.add(InitModule(nav))
             Reflections("com.waicool20.wai2k.script.modules")
-                    .getSubTypesOf(ScriptModule::class.java)
-                    .map { it.kotlin }
-                    .filterNot { it.isAbstract || it == InitModule::class || it == StopModule::class }
-                    .mapNotNull {
-                        it.primaryConstructor?.call(this, region, currentConfig, currentProfile, nav)
-                    }
-                    .let { modules.addAll(it) }
-            modules.add(StopModule(this, region, currentConfig, currentProfile, nav))
+                .getSubTypesOf(ScriptModule::class.java)
+                .map { it.kotlin }
+                .filterNot { it.isAbstract || it == InitModule::class || it == StopModule::class }
+                .mapNotNull { it.primaryConstructor?.call(nav) }
+                .let { modules.addAll(it) }
+            modules.add(StopModule(nav))
             modules.map { it::class.simpleName }.forEach { logger.info("Loaded new instance of $it") }
         }
     }
@@ -154,7 +164,7 @@ class ScriptRunner(
         scriptJob?.cancel()
     }
 
-    private suspend fun runScriptCycle() {
+    private suspend fun runScriptCycle() = coroutineScope {
         reload()
         if (modules.isEmpty()) coroutineContext.cancelAndYield()
         try {
@@ -162,20 +172,31 @@ class ScriptRunner(
             justRestarted = false
         } catch (e: ScriptException) {
             logger.warn("Fault detected, restarting game")
+            val now = LocalDateTime.now()
             e.printStackTrace()
+            val device = requireNotNull(currentDevice)
+            val screenshot = device.screens.first().capture()
+            val output = Wai2K.CONFIG_DIR.resolve("debug")
+                .resolve("${DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss").format(now)}.png")
+            launch(Dispatchers.IO) {
+                Files.createDirectories(output.parent)
+                ImageIO.write(screenshot, "PNG", output.toFile())
+                logger.info("Saved debug image to: ${output.toAbsolutePath()}")
+            }
             if (currentConfig.gameRestartConfig.enabled) {
-                restartGame()
+                restartGame(e.localizedMessage)
             } else {
                 logger.warn("Restart not enabled, ending script here")
                 coroutineContext.cancelAndYield()
             }
         }
+        postStats()
         if (isPaused) {
             logger.info("Script is now paused")
             while (isPaused) delay(currentConfig.scriptConfig.loopDelay * 1000L)
             logger.info("Script will now resume")
         } else {
-            delay(currentConfig.scriptConfig.loopDelay * 1000L)
+            delay((currentConfig.scriptConfig.loopDelay * 1000L).coerceAtLeast(500))
         }
     }
 
@@ -183,7 +204,7 @@ class ScriptRunner(
      * Restarts the game
      * This assumes that automatic login is enabled and no updates are required
      */
-    suspend fun restartGame() {
+    suspend fun restartGame(reason: String) {
         if (scriptStats.gameRestarts >= currentConfig.gameRestartConfig.maxRestarts) {
             logger.info("Maximum of restarts reached, terminating script instead")
             coroutineContext.cancelAndYield()
@@ -192,6 +213,9 @@ class ScriptRunner(
         val region = device.screens.first()
         gameState.requiresRestart = false
         scriptStats.gameRestarts++
+        if (currentConfig.notificationsConfig.onRestart) {
+            YuuBot.postMessage(currentConfig.apiKey, "Script Restarted", "Reason: $reason")
+        }
         logger.info("Game will now restart")
         ProcessManager(device).apply {
             kill(GFL.pkgName)
@@ -199,9 +223,9 @@ class ScriptRunner(
             start(GFL.pkgName, GFL.mainActivity)
         }
         logger.info("Game restarted, waiting for login screen")
-        region.subRegion(672, 960, 250, 93)
-                .waitHas(FileTemplate("login.png", 0.8), 5 * 60 * 1000)
-                ?: logger.warn("Timed out on login!")
+        region.subRegion(550, 960, 250, 93)
+            .waitHas(FileTemplate("login.png", 0.8), 5 * 60 * 1000)
+            ?: logger.warn("Timed out on login!")
         logger.info("Logging in")
         region.subRegion(630, 400, 900, 300).click()
         val locations = GameLocation.mappings(currentConfig)
@@ -217,8 +241,11 @@ class ScriptRunner(
                 Ocr.forConfig(currentConfig).doOCRAndTrim(r).distanceTo("RESUME") <= 3 -> {
                     logger.info("Detected ongoing battle, terminating it first")
                     r.clickWhile { Ocr.forConfig(currentConfig).doOCRAndTrim(r).distanceTo("RESUME") <= 3 }
-                    region.waitHas(FileTemplate("combat/battle/terminate.png"), 5000)
-                    delay(2500)
+                    // Two terminate button checks, one for when we just entered, the other to wait for
+                    // any current battle to end.
+                    region.waitHas(FileTemplate("combat/battle/terminate.png"), 10000)
+                        ?: continue@loop
+                    delay(3000)
                     region.waitHas(FileTemplate("combat/battle/terminate.png"), 30000)
                     val mapRunnerRegions = MapRunnerRegions(region)
                     mapRunnerRegions.terminateMenu.click(); delay(700)
@@ -235,5 +262,16 @@ class ScriptRunner(
         }
         logger.info("Finished logging in")
         justRestarted = true
+    }
+
+    private fun postStats() {
+        // Only post new stats if it has changed
+        val newHash = scriptStats.hashCode()
+        if (statsHash != newHash) {
+            statsHash = newHash
+            lastStartTime?.let { startTime ->
+                YuuBot.postStats(currentConfig.apiKey, startTime, currentProfile, scriptStats)
+            }
+        }
     }
 }

@@ -22,14 +22,10 @@ package com.waicool20.wai2k.script.modules
 
 import com.waicool20.cvauto.android.AndroidRegion
 import com.waicool20.cvauto.core.template.FileTemplate
-import com.waicool20.wai2k.config.Wai2KConfig
-import com.waicool20.wai2k.config.Wai2KProfile
 import com.waicool20.wai2k.game.Echelon
 import com.waicool20.wai2k.game.LocationId
 import com.waicool20.wai2k.game.LogisticsSupport
 import com.waicool20.wai2k.script.Navigator
-import com.waicool20.wai2k.script.ScriptRunner
-import com.waicool20.wai2k.script.ScriptTimeOutException
 import com.waicool20.wai2k.util.Ocr
 import com.waicool20.wai2k.util.doOCRAndTrim
 import com.waicool20.wai2k.util.formatted
@@ -40,13 +36,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.yield
 import java.time.Instant
 
-class LogisticsSupportModule(
-        scriptRunner: ScriptRunner,
-        region: AndroidRegion,
-        config: Wai2KConfig,
-        profile: Wai2KProfile,
-        navigator: Navigator
-) : ScriptModule(scriptRunner, region, config, profile, navigator) {
+class LogisticsSupportModule(navigator: Navigator) : ScriptModule(navigator) {
     private val logger = loggerFor<LogisticsSupportModule>()
     override suspend fun execute() {
         if (!profile.logistics.enabled) return
@@ -58,19 +48,20 @@ class LogisticsSupportModule(
      * Checks if any echelons require dispatching then dispatches them
      */
     private suspend fun checkAndDispatchEchelons() {
+        if (logisticSupportLimitReached()) return
         val queue = profile.logistics.assignments
-                // Map to echelon
-                .mapKeys { gameState.echelons[it.key - 1] }
-                // Keep all echelons that don't have an assignment already
-                .filter { it.key.logisticsSupportAssignment == null }
-                // Remove all echelons with disabled logistics
-                .filter { it.key.logisticsSupportEnabled }
-                // Keep all echelons that have configured assignments
-                .filter { it.value.isNotEmpty() }
-                // Remove all the echelons that have repairs ongoing
-                .filterNot { it.key.hasRepairs() }
+            // Map to echelon
+            .mapKeys { gameState.echelons[it.key - 1] }
+            // Keep all echelons that don't have an assignment already
+            .filter { it.key.logisticsSupportAssignment == null }
+            // Remove all echelons with disabled logistics
+            .filter { it.key.logisticsSupportEnabled }
+            // Keep all echelons that have configured assignments
+            .filter { it.value.isNotEmpty() }
+            // Remove all the echelons that have repairs ongoing
+            .filterNot { it.key.hasRepairs() }
         // Return if no echelons to dispatch or logistic support 4/4 was reached
-        if (queue.isEmpty() || logisticSupportLimitReached()) return
+        if (queue.isEmpty()) return
         navigator.navigateTo(LocationId.LOGISTICS_SUPPORT)
         queue.entries.shuffled().forEach { (echelon, ls) ->
             if (logisticSupportLimitReached()) {
@@ -79,13 +70,12 @@ class LogisticsSupportModule(
             }
             logger.info("Valid assignments for $echelon: ${ls.joinToString()}")
             val assignment = LogisticsSupport.list
-                    .filter { ls.contains(it.number) }
-                    // Remove any logistic support that are being run by other echelons atm
-                    .filter { l -> gameState.echelons.none { it.logisticsSupportAssignment?.logisticSupport == l } }
-                    // Choose a random logistic support
-                    .shuffled().firstOrNull()
+                .filter { ls.contains(it.number) }
+                // Remove any logistic support that are being run by other echelons atm
+                .filter { l -> gameState.echelons.none { it.logisticsSupportAssignment?.logisticSupport == l } }
+                // Choose a random logistic support
+                .shuffled().firstOrNull()
             if (assignment != null) dispatchEchelon(echelon, assignment)
-            yield()
         }
     }
 
@@ -127,8 +117,8 @@ class LogisticsSupportModule(
         // Click the ok button of the popup if any of the resources broke the hard cap
         // Use subregion so it doesnt click dispatch ok instead
         region.subRegion(500, 90, 1155, 815).findBest(FileTemplate("ok.png"))
-                ?.also { logger.info("One of the resources reached its limit!") }
-                ?.region?.click()
+            ?.also { logger.info("One of the resources reached its limit!") }
+            ?.region?.click()
 
         region.waitHas(FileTemplate("logistics/formation.png"), 10000)
         if (!clickEchelon(echelon)) return
@@ -139,7 +129,7 @@ class LogisticsSupportModule(
 
         // Wait for logistics mission icon to appear again
         region.subRegion(131, 306, 257, 118)
-                .waitHas(FileTemplate("logistics/logistics.png"), 7000)
+            .waitHas(FileTemplate("logistics/logistics.png"), 7000)
 
         // Check if mission is running
         if (missionRunning(missionIndex)) {
@@ -209,13 +199,13 @@ class LogisticsSupportModule(
         val start = System.currentTimeMillis()
         while (isActive) {
             val echelons = eRegion.findBest(FileTemplate("echelons/echelon.png"), 8)
-                    .map { it.region }
-                    .map { it.copyAs<AndroidRegion>(it.x + 93, it.y - 40, 60, 100) }
-                    .mapAsync {
-                        Ocr.forConfig(config, true).doOCRAndTrim(it)
-                                .replace("18", "10").toInt() to it
-                    }
-                    .toMap()
+                .map { it.region }
+                .map { it.copyAs<AndroidRegion>(it.x + 93, it.y - 40, 60, 100) }
+                .mapAsync {
+                    Ocr.forConfig(config, true).doOCRAndTrim(it)
+                        .replace("18", "10").toInt() to it
+                }
+                .toMap()
             logger.debug("Visible echelons: ${echelons.keys}")
             when {
                 echelons.keys.isEmpty() -> {
@@ -228,8 +218,8 @@ class LogisticsSupportModule(
                     return true
                 }
             }
-            val lEchelon = echelons.keys.min() ?: echelons.keys.firstOrNull() ?: continue
-            val hEchelon = echelons.keys.max() ?: echelons.keys.lastOrNull() ?: continue
+            val lEchelon = echelons.keys.minOrNull() ?: echelons.keys.firstOrNull() ?: continue
+            val hEchelon = echelons.keys.maxOrNull() ?: echelons.keys.lastOrNull() ?: continue
             val lEchelonRegion = echelons[lEchelon] ?: continue
             val hEchelonRegion = echelons[hEchelon] ?: continue
             when {
@@ -256,6 +246,6 @@ class LogisticsSupportModule(
      * Checks if the amount of ongoing logistic support is 4
      */
     private fun logisticSupportLimitReached(): Boolean {
-        return gameState.echelons.mapNotNull { it.logisticsSupportAssignment }.size >= 4
+        return gameState.echelons.count { it.logisticsSupportAssignment?.eta?.isAfter(Instant.now()) == true } > 4
     }
 }

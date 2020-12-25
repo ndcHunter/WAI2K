@@ -11,9 +11,6 @@ If you understand this then read on
 
 ---
 
-This software is currently in a feature incomplete state, Windows support is still unstable, but 
-extensive testing has been done in Linux. 
-
 # Features
 
 - Logistics Support
@@ -21,53 +18,24 @@ extensive testing has been done in Linux.
   - Corpse dragging
 - Auto enhancement
 - Auto disassembly
+- Auto combat reports, make kalina work overtime!
+- Auto combat simulations
+- [Discord integration](https://github.com/waicool20/WAI2K/wiki/Discord-Integration)
 - Can run in background without taking over desktop mouse
-- Can run on phone (Provided you have a phone that is 2160x1080 resolution)
 - More to come
 
-# Setup
+# How do I get this running?
 
-Prerequisites:
-
-* [Java JDK 8 ( Get the Full Version! )](https://bell-sw.com/pages/java-8u252/)
-* [Assets Directory](https://github.com/waicool20/WAI2K/tree/master/assets)
-* Emulator, must be 2160x1080 resolution
-
-Currently this project does not release under github due to the WIP nature. However you can find per-commit
-ready to use app on [AppVeyor](https://ci.appveyor.com/project/waicool20/wai2k) under the artifacts tab
-
-Start the app by running the jar file (Double click on windows)
-
-A new folder called `wai2k` will be generated beside the app, this is your configuration directory.
-Take the assets directory downloaded above and place it inside.
-
-You will also be prompted to download some extra files into `wai2k/tessdata`
-
-All in all your final configuration directory should look like this:  
-![Config Directory](screenshots/config-dir.png?raw=true)
-
-It is recommended to use the Android Studio Emulator to run the game.
-
-There is a certain difficulty in setting up the script due to the specificity that the script requires in the environment it runs in
-which is understandable, hopefully the articles below can help you.
-You can always join our discord community (Invite below) if you have any further questions.
-
-- Emulator setup (WIP)
+[Read the full setup guide here](https://github.com/waicool20/WAI2K/wiki#wai2k---setup-guide)
 
 # Build Instructions
-
-Prerequisites: 
-
-* [Java JDK 8](http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html)
-* [My Utility Library](https://github.com/waicool20/waicoolUtils), place this inside the project directory, you don't need to do this if you are cloning and pulling all submodules
-* [CVAuto](https://github.com/waicool20/CVAuto), same as the utility library above
 
 Git clone instructions: 
 
 ```bash
-git clone https://github.com/waicool20/WAI2K.git     // Clone repository, replace with ssh url if you prefer that  
-cd WAI2K/                                            // Make sure you are in the WAI2K directory
-git submodule update --init --recursive             // Pull all submodules, this includes the utility library and cvauto
+git clone https://github.com/waicool20/WAI2K.git      // Clone repository, replace with ssh url if you prefer that  
+cd WAI2K/                                             // Make sure you are in the WAI2K directory
+git submodule update --init --recursive               // Pull all submodules, this includes the utility library and cvauto
 ```
 
 To build the jar file after cloning/pulling the latest commits, go into the repo directory and run the right command
@@ -80,7 +48,7 @@ Linux/MacOS:
 
 > ./gradlew
 
-A compiled Jar file which you can execute directly will be generated in the build/libs directory
+A compiled Jar file will be generated in the build/libs directory
 
 # Screenshots
 

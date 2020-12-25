@@ -7,17 +7,17 @@
         "asset": {
           "imageName": "home",
           "x": 104,
-          "y": 509,
-          "width": 60,
-          "height": 60
+          "y": 515,
+          "width": 57,
+          "height": 49
         }
       },
       {
         "asset": {
           "imageName": "home0",
           "x": 1776,
-          "y": 664,
-          "y-": 563,
+          "y-": 664,
+          "y": 563,
           "width": 60,
           "height": 60
         }
@@ -29,8 +29,8 @@
         "asset": {
           "imageName": "",
           "x": 1328,
-          "y": 646,
-          "y-": 544,
+          "y-": 646,
+          "y": 544,
           "width": 375,
           "height": 161
         }
@@ -50,8 +50,8 @@
         "asset": {
           "imageName": "",
           "x": 1720,
-          "y": 645,
-          "y-": 543,
+          "y-": 645,
+          "y": 543,
           "width": 286,
           "height": 162
         }
@@ -61,8 +61,8 @@
         "asset": {
           "imageName": "",
           "x": 1730,
-          "y": 470,
-          "y-": 368,
+          "y-": 470,
+          "y": 368,
           "width": 273,
           "height": 143
         }
@@ -72,8 +72,8 @@
         "asset": {
           "imageName": "",
           "x": 1204,
-          "y": 645,
-          "y-": 543,
+          "y-": 645,
+          "y": 543,
           "width": 109,
           "height": 162
         }
@@ -83,8 +83,8 @@
         "asset": {
           "imageName": "",
           "x": 1371,
-          "y": 470,
-          "y-": 368,
+          "y-": 470,
+          "y": 368,
           "width": 354,
           "height": 144
         }
@@ -100,8 +100,8 @@
         }
       },
       {
-        "dest-": "event",
-        "dest": "unknown",
+        "dest": "event",
+        "dest-": "unknown",
         "asset": {
           "imageName": "",
           "x": 1536,
@@ -142,8 +142,8 @@
         "asset": {
           "imageName": "",
           "x": 1328,
-          "y": 646,
-          "y-": 544,
+          "y-": 646,
+          "y": 544,
           "width": 375,
           "height": 161
         }
@@ -153,8 +153,8 @@
         "asset": {
           "imageName": "",
           "x": 1720,
-          "y": 645,
-          "y-": 543,
+          "y-": 645,
+          "y": 543,
           "width": 286,
           "height": 162
         }
@@ -164,8 +164,8 @@
         "asset": {
           "imageName": "",
           "x": 1730,
-          "y": 470,
-          "y-": 368,
+          "y-": 470,
+          "y": 368,
           "width": 273,
           "height": 143
         }
@@ -175,15 +175,25 @@
         "asset": {
           "imageName": "",
           "x": 1371,
-          "y": 470,
-          "y-": 368,
+          "y-": 470,
+          "y": 368,
           "width": 354,
           "height": 144
         }
       },
       {
-        "dest-": "event",
-        "dest": "unknown",
+        "dest": "data_room",
+        "asset": {
+          "imageName": "",
+          "x": 105,
+          "y": 225,
+          "width": 121,
+          "height": 121
+        }
+      },
+      {
+        "dest": "event",
+        "dest-": "unknown",
         "asset": {
           "imageName": "",
           "x": 1536,
@@ -372,8 +382,8 @@
       {
         "asset": {
           "imageName": "dummy_link",
-          "x": 456,
-          "y": 232,
+          "x": 764,
+          "y": 252,
           "width": 60,
           "height": 60
         }
@@ -439,8 +449,8 @@
       {
         "asset": {
           "imageName": "tdoll_enhancement",
-          "x": 1531,
-          "y": 796,
+          "x": 735,
+          "y": 157,
           "width": 60,
           "height": 60
         }
@@ -506,8 +516,8 @@
       {
         "asset": {
           "imageName": "tdoll_disassembly",
-          "x": 907,
-          "y": 771,
+          "x": 474,
+          "y": 915,
           "width": 60,
           "height": 60
         }
@@ -663,8 +673,8 @@
         "asset": {
           "imageName": "",
           "x": 131,
-          "y": 164,
-          "y-": 296,
+          "y-": 164,
+          "y": 296,
           "width": 257,
           "height": 118
         }
@@ -674,8 +684,19 @@
         "asset": {
           "imageName": "",
           "x": 131,
-          "y": 296,
+          "y-": 296,
+          "y": 428,
+          "width": 257,
+          "height": 118
+        }
+      },
+      {
+        "dest": "combat_simulation",
+        "asset": {
+          "imageName": "",
+          "x": 131,
           "y-": 428,
+          "y": 562,
           "width": 257,
           "height": 118
         }
@@ -689,7 +710,7 @@
       {
         "asset": {
           "imageName": "combat_settings",
-          "x": 608,
+          "x": 655,
           "y": 132,
           "width": 60,
           "height": 60
@@ -701,10 +722,10 @@
         "dest": "combat_menu",
         "asset": {
           "imageName": "",
-          "x": 383,
-          "y": 92,
+          "x": 444,
+          "y": 96,
           "width": 169,
-          "height": 94
+          "height": 93
         }
       }
     ]
@@ -739,8 +760,8 @@
         "asset": {
           "imageName": "",
           "x": 131,
-          "y": 296,
-          "y-": 428,
+          "y-": 296,
+          "y": 428,
           "width": 257,
           "height": 118
         }
@@ -787,8 +808,56 @@
         "asset": {
           "imageName": "",
           "x": 131,
-          "y": 164,
-          "y-": 296,
+          "y-": 164,
+          "y": 296,
+          "width": 257,
+          "height": 118
+        }
+      },
+      {
+        "dest": "combat_menu",
+        "asset": {
+          "imageName": "",
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        }
+      }
+    ]
+  },
+  {
+    "id": "combat_simulation",
+    "isIntermediate": true,
+    "landmarks": [
+      {
+        "asset": {
+          "imageName": "combat_simulation",
+          "x": 1959,
+          "y": 179,
+          "width": 60,
+          "height": 60
+        }
+      }
+    ],
+    "links": [
+      {
+        "dest": "home",
+        "asset": {
+          "imageName": "",
+          "x": 120,
+          "y": 0,
+          "width": 205,
+          "height": 130
+        }
+      },
+      {
+        "dest": "combat",
+        "asset": {
+          "imageName": "",
+          "x": 131,
+          "y-": 164,
+          "y": 296,
           "width": 257,
           "height": 118
         }
@@ -866,8 +935,8 @@
       {
         "asset": {
           "imageName": "dormitories",
-          "x": 225,
-          "y": 40,
+          "x": 423,
+          "y": 30,
           "width": 60,
           "height": 60
         }
@@ -878,10 +947,10 @@
         "dest": "home",
         "asset": {
           "imageName": "",
-          "x": 120,
-          "y": 0,
-          "width": 205,
-          "height": 130
+          "x": 135,
+          "y":15,
+          "width": 259,
+          "height": 122
         }
       }
     ]
@@ -914,14 +983,14 @@
     ]
   },
   {
-    "id": "fairy_details",
+    "id": "data_room",
     "isIntermediate": false,
     "landmarks": [
       {
         "asset": {
-          "imageName": "fairy_details",
-          "x": 186,
-          "y": 833,
+          "imageName": "data_room",
+          "x": 334,
+          "y": 76,
           "width": 60,
           "height": 60
         }
@@ -929,13 +998,13 @@
     ],
     "links": [
       {
-        "dest": "formation",
+        "dest": "home",
         "asset": {
           "imageName": "",
           "x": 120,
-          "y": 364,
-          "width": 139,
-          "height": 321
+          "y": 5,
+          "width": 140,
+          "height": 122
         }
       }
     ]
@@ -947,8 +1016,8 @@
       {
         "asset": {
           "imageName": "event",
-          "x": 359,
-          "y": 520,
+          "x": 134,
+          "y": 733,
           "width": 60,
           "height": 60
         }
@@ -961,8 +1030,8 @@
           "imageName": "",
           "x": 120,
           "y": 0,
-          "width": 205,
-          "height": 130
+          "width": 138,
+          "height": 145
         }
       }
     ]

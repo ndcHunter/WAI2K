@@ -22,15 +22,18 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinPluginWrapper
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.nio.file.StandardOpenOption
+import java.security.MessageDigest
 
 plugins {
     java
-    kotlin("jvm") version "1.3.72"
-    id("com.github.johnrengelman.shadow") version "5.0.0"
+    kotlin("jvm") version "1.4.20"
+    id("com.github.johnrengelman.shadow") version "5.2.0"
+    id("org.openjfx.javafxplugin") version "0.0.8"
 }
 
 group = "com.waicool20"
-version = "v0.0.1"
+version = System.getenv("APPVEYOR_REPO_COMMIT")?.take(8) ?: "v0.0.1"
 defaultTasks = mutableListOf("build")
 
 repositories {
@@ -39,28 +42,35 @@ repositories {
     maven("https://jitpack.io")
 }
 
+javafx {
+    version = "15"
+    modules = listOf("javafx.controls", "javafx.fxml", "javafx.swing")
+}
+
 dependencies {
     val versions = object {
         val Kotlin by lazy { plugins.getPlugin(KotlinPluginWrapper::class).kotlinPluginVersion }
-        val KotlinCoroutines = "1.3.5"
+        val KotlinCoroutines = "1.4.2"
         val Jackson = "2.10.1" // Higher version break loading javafx compatibility
     }
 
-    implementation("org.jetbrains.kotlin", "kotlin-stdlib-jdk8", versions.Kotlin)
     implementation("org.jetbrains.kotlin", "kotlin-reflect", versions.Kotlin)
     implementation("org.jetbrains.kotlinx", "kotlinx-coroutines-core", versions.KotlinCoroutines)
     implementation("org.jetbrains.kotlinx", "kotlinx-coroutines-javafx", versions.KotlinCoroutines)
-    implementation("no.tornado", "tornadofx", "1.7.19")
     implementation("com.fasterxml.jackson.core", "jackson-core", versions.Jackson)
     implementation("com.fasterxml.jackson.core", "jackson-databind", versions.Jackson)
     implementation("com.fasterxml.jackson.core", "jackson-annotations", versions.Jackson)
     implementation("com.fasterxml.jackson.module", "jackson-module-kotlin", versions.Jackson)
     implementation("com.fasterxml.jackson.datatype", "jackson-datatype-jsr310", versions.Jackson)
     implementation("ch.qos.logback", "logback-classic", "1.2.3")
-    implementation("org.controlsfx", "controlsfx", "8.40.14")
+    implementation ("no.tornado:tornadofx:2.0.0-SNAPSHOT")
+    implementation("org.controlsfx:controlsfx:11.0.2")
     implementation("org.reflections", "reflections", "0.9.12")
+    implementation("com.squareup.okhttp3:okhttp:4.9.0")
+    implementation("ai.djl.pytorch:pytorch-engine:0.9.0")
+    implementation("ai.djl.pytorch:pytorch-native-auto:1.7.0")
 
-    implementation("net.sourceforge.tess4j", "tess4j", "4.5.1") {
+    implementation("net.sourceforge.tess4j", "tess4j", "4.5.4") {
         exclude("org.ghost4j")
         exclude("org.apache.pdfbox")
         exclude("org.jboss")
@@ -70,9 +80,25 @@ dependencies {
     implementation("com.waicool20:cvauto-android")
 }
 
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(14))
+    }
+}
+
 tasks {
-    processResources { dependsOn("versioning") }
-    build { finalizedBy("shadowJar") }
+    processResources {
+        dependsOn("versioning")
+        dependsOn("deps-list")
+    }
+    build {
+        finalizedBy("shadowJar")
+        finalizedBy(gradle.includedBuild("launcher").task(":build"))
+    }
+    withType<AbstractArchiveTask>().configureEach {
+        isPreserveFileTimestamps = false
+        isReproducibleFileOrder = true
+    }
     jar {
         enabled = false
         manifest {
@@ -82,19 +108,48 @@ tasks {
     withType<KotlinCompile> {
         kotlinOptions {
             jvmTarget = JavaVersion.VERSION_1_8.toString()
-            freeCompilerArgs = listOf(
-                    "-Xuse-experimental=kotlin.Experimental",
-                    "-Xuse-experimental=kotlin.time.ExperimentalTime",
-                    "-Xuse-experimental=kotlinx.coroutines.FlowPreview",
-                    "-Xuse-experimental=kotlinx.coroutines.ExperimentalCoroutinesApi",
-                    "-Xuse-experimental=kotlinx.coroutines.ObsoleteCoroutinesApi"
-            )
+            freeCompilerArgs = listOf()
         }
     }
     withType<ShadowJar> {
         archiveClassifier.value("")
         archiveVersion.value("")
-        exclude("tessdata/")
+        dependencies {
+            include { it.moduleGroup.startsWith("com.waicool20") }
+        }
+        doLast { md5sum(archiveFile.get()) }
+    }
+}
+
+task("prepare-deploy") {
+    dependsOn("build", "deps-list", "packAssets")
+}
+
+task("deps-list") {
+    val file = Paths.get("$buildDir/deploy/dependencies.txt")
+    doFirst {
+        if (Files.notExists(file)) {
+            Files.createDirectories(file.parent)
+            Files.createFile(file)
+        }
+    }
+    doLast {
+        tailrec fun getDeps(deps: Set<DependencyResult>): List<DependencyResult> {
+            return if (deps.isNotEmpty()) deps.flatMap { it.from.dependencies } else getDeps(deps)
+        }
+
+        val deps = getDeps(configurations.default.get().incoming.resolutionResult.allDependencies)
+                .map { it.toString() }
+                .distinct()
+                .filterNot { it.startsWith("project") || it.contains("->") }
+        val repos = project.repositories.mapNotNull { it as? MavenArtifactRepository }.map { it.url }
+        val output = StringBuilder()
+        output.appendln("Repositories:")
+        repos.forEach { output.appendln("- $it") }
+        output.appendln()
+        output.appendln("Dependencies:")
+        deps.forEach { output.appendln("- $it") }
+        Files.write(file, output.toString().toByteArray(), StandardOpenOption.TRUNCATE_EXISTING)
     }
 }
 
@@ -110,7 +165,28 @@ task("versioning") {
 
 task<Zip>("packAssets") {
     archiveFileName.set("assets.zip")
-    destinationDirectory.set(file("$buildDir"))
+    destinationDirectory.set(file("$buildDir/deploy/"))
 
-    from("$projectDir/assets")
+    from(projectDir)
+    include("/assets/**")
+    exclude("/assets/models/**")
+    doLast { md5sum(archiveFile.get()) }
+}
+
+task<Zip>("packModels") {
+    archiveFileName.set("models.zip")
+    destinationDirectory.set(file("$buildDir/deploy/"))
+
+    from(projectDir)
+    include("/assets/models/**")
+    doLast { md5sum(archiveFile.get()) }
+}
+
+fun md5sum(file: RegularFile) {
+    val path = file.asFile.toPath()
+    val md5File = Paths.get("$path.md5")
+    val md5sum = MessageDigest.getInstance("MD5")
+        .digest(Files.readAllBytes(path))
+        .joinToString("") { String.format("%02x", it) }
+    Files.write(md5File, md5sum.toByteArray())
 }

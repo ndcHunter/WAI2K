@@ -20,71 +20,52 @@
 package com.waicool20.wai2k.script.modules.combat.maps
 
 import com.waicool20.cvauto.android.AndroidRegion
-import com.waicool20.wai2k.config.Wai2KConfig
-import com.waicool20.wai2k.config.Wai2KProfile
-import com.waicool20.wai2k.script.ScriptRunner
-import com.waicool20.wai2k.script.modules.combat.MapRunner
+import com.waicool20.wai2k.script.ScriptComponent
+import com.waicool20.wai2k.script.modules.combat.HomographyMapRunner
 import com.waicool20.waicoolutils.logging.loggerFor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import kotlin.random.Random
 
-class Map5_6(
-        scriptRunner: ScriptRunner,
-        region: AndroidRegion,
-        config: Wai2KConfig,
-        profile: Wai2KProfile
-) : MapRunner(scriptRunner, region, config, profile) {
+class Map5_6(scriptComponent: ScriptComponent) : HomographyMapRunner(scriptComponent) {
     private val logger = loggerFor<Map5_6>()
-    override val isCorpseDraggingMap = false
-    override val extractBlueNodes = false
-    override val extractYellowNodes = false
+    override val rationsResupplyThreshold = 0.5 // only 2 battles
 
-    override suspend fun execute() {
+    override suspend fun begin() {
         if (gameState.requiresMapInit) {
+            // Try get all nodes on screen
             logger.info("Zoom out")
             repeat(2) {
                 region.pinch(
-                        Random.nextInt(700, 800),
-                        Random.nextInt(300, 400),
-                        0.0,
-                        500
+                    Random.nextInt(700, 800),
+                    Random.nextInt(300, 400),
+                    0.0,
+                    500
                 )
                 delay(200)
             }
-            //pan down
+            logger.info("Pan up")
             val r = region.subRegionAs<AndroidRegion>(998, 624, 100, 30)
-            r.swipeTo(r.copy(y = r.y - 400))
+            r.swipeTo(r.copy(y = r.y + 200))
             delay(500)
-            deployEchelons(nodes[3])
-            gameState.requiresMapInit = false           
+            gameState.requiresMapInit = false
         }
-        else{
-            deployEchelons(nodes[0])
-        }   
-        // pan up
-        val r = region.subRegionAs<AndroidRegion>(1058, 224, 100, 22)
-        repeat(2) {
-            r.swipeTo(r.copy(y = r.y + 490))
-            delay(200)
-        }
-
-        val rEchelons = deployEchelons(nodes[1])
+        val rEchelons = deployEchelons(nodes[0], nodes[1])
         mapRunnerRegions.startOperation.click(); yield()
         waitForGNKSplash()
         resupplyEchelons(rEchelons)
         planPath()
         waitForTurnEnd(2)
-        handleBattleResults()      
+        handleBattleResults()
     }
 
     private suspend fun planPath() {
         logger.info("Entering planning mode")
         mapRunnerRegions.planningMode.click(); yield()
 
-        logger.info("Selecting echelon at ${nodes[1]}")
-        nodes[1].findRegion().click()
-        
+        logger.info("Selecting echelon at ${nodes[0]}")
+        nodes[0].findRegion().click()
+
         logger.info("Selecting ${nodes[2]}")
         nodes[2].findRegion().click(); yield()
 

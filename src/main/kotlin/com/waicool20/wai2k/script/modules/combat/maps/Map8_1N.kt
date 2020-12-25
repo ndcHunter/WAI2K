@@ -20,64 +20,65 @@
 package com.waicool20.wai2k.script.modules.combat.maps
 
 import com.waicool20.cvauto.android.AndroidRegion
-import com.waicool20.wai2k.config.Wai2KConfig
-import com.waicool20.wai2k.config.Wai2KProfile
-import com.waicool20.wai2k.script.ScriptRunner
-import com.waicool20.wai2k.script.modules.combat.MapRunner
+import com.waicool20.wai2k.script.ScriptComponent
+import com.waicool20.wai2k.script.modules.combat.AbsoluteMapRunner
+import com.waicool20.wai2k.script.modules.combat.CorpseDragging
 import com.waicool20.waicoolutils.logging.loggerFor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
+import kotlin.math.roundToLong
 import kotlin.random.Random
 
-class Map8_1N(
-        scriptRunner: ScriptRunner,
-        region: AndroidRegion,
-        config: Wai2KConfig,
-        profile: Wai2KProfile
-) : MapRunner(scriptRunner, region, config, profile) {
+class Map8_1N(scriptComponent: ScriptComponent) : AbsoluteMapRunner(scriptComponent), CorpseDragging {
     private val logger = loggerFor<Map8_1N>()
-    override val isCorpseDraggingMap = true
 
-    // Too much blue in this map
-    override val extractBlueNodes = false
-    override val extractYellowNodes = false
-
-    override suspend fun execute() {
+    override suspend fun begin() {
         if (gameState.requiresMapInit) {
+            // All nodes will be on screen, only 'sticks' after a successful run
             logger.info("Zoom out")
-            repeat(2) {
-                region.pinch(
-                        Random.nextInt(700, 800),
-                        Random.nextInt(300, 400),
-                        0.0,
-                        500
-                )
-                delay(200)
-            }
+            region.pinch(
+                Random.nextInt(700, 800),
+                Random.nextInt(200, 300),
+                0.0,
+                500)
+            delay(500)
+            logger.info("Pan up")
+            val r = region.subRegionAs<AndroidRegion>(1058, 224, 100, 22)
+            r.swipeTo(r.copy(y = r.y + 600))
+            delay(500)
             gameState.requiresMapInit = false
-            delay(1000)
         }
-        val r = region.subRegionAs<AndroidRegion>(1058, 224, 100, 22)
-        r.swipeTo(r.copy(y = r.y + 600))
-        delay(500)
+        delay((500 * gameState.delayCoefficient).roundToLong())
 
         nodes[1].findRegion()
         val rEchelons = deployEchelons(nodes[3], nodes[0])
         mapRunnerRegions.startOperation.click(); yield()
         waitForGNKSplash()
-        resupplyEchelons(rEchelons + nodes[0])
-        planPath()
-        waitForTurnEnd(5, false)
+
+        resupplyEchelons(nodes[0])
         retreatEchelons(nodes[0])
-        terminateMission()
+
+        if (rEchelons.contains(nodes[3])) {
+            // If a doll throws a smoke grenade may suicide the run
+            logger.info("Dragging Echelon is NOT prepared to drag!")
+            logger.info("Canceling this sortie")
+            // Do over the map
+            gameState.requiresMapInit = true
+            terminateMission(incrementSorties = false)
+        } else {
+            // No suicide if Zas has correct stats
+            planPath()
+            waitForTurnEnd(5, false)
+            terminateMission()
+        }
     }
 
     private suspend fun planPath() {
-        logger.info("Selecting echelon at ${nodes[3]}")
-        nodes[3].findRegion().click()
-
         logger.info("Entering planning mode")
         mapRunnerRegions.planningMode.click(); yield()
+
+        logger.info("Selecting echelon at ${nodes[3]}")
+        nodes[3].findRegion().click()
 
         logger.info("Selecting ${nodes[2]}")
         nodes[2].findRegion().click()
@@ -88,5 +89,4 @@ class Map8_1N(
         logger.info("Executing plan")
         mapRunnerRegions.executePlan.click()
     }
-
 }

@@ -7,11 +7,12 @@
     <JetCodeStyleSettings>
       <option name="PACKAGES_TO_USE_STAR_IMPORTS">
         <value>
-          <package name="java.util" withSubpackages="false" static="false" />
-          <package name="kotlinx.android.synthetic" withSubpackages="true" static="false" />
-          <package name="tornadofx" withSubpackages="false" static="false" />
+          <package name="java.util" alias="false" withSubpackages="false" />
+          <package name="kotlinx.android.synthetic" alias="false" withSubpackages="true" />
+          <package name="tornadofx" alias="false" withSubpackages="false" />
         </value>
       </option>
+      <option name="CODE_STYLE_DEFAULTS" value="KOTLIN_OFFICIAL" />
     </JetCodeStyleSettings>
     <TypeScriptCodeStyleSettings version="0">
       <option name="SPACES_WITHIN_IMPORTS" value="true" />
@@ -54,7 +55,11 @@
       </indentOptions>
     </codeStyleSettings>
     <codeStyleSettings language="kotlin">
+      <option name="CODE_STYLE_DEFAULTS" value="KOTLIN_OFFICIAL" />
       <option name="FIELD_ANNOTATION_WRAP" value="1" />
+      <indentOptions>
+        <option name="CONTINUATION_INDENT_SIZE" value="4" />
+      </indentOptions>
     </codeStyleSettings>
   </code_scheme>
 </component>

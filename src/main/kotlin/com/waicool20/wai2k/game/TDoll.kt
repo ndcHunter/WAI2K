@@ -26,13 +26,13 @@ import com.waicool20.wai2k.util.Ocr
 import com.waicool20.waicoolutils.distanceTo
 
 data class TDoll(
-        /**
-         * Display name of the tdoll as shown in game
-         */
-        val name: String,
-        val stars: Int,
-        val type: Type,
-        private val moddable: Boolean = false
+    /**
+     * Display name of the tdoll as shown in game
+     */
+    val name: String,
+    val stars: Int,
+    val type: Type,
+    private val moddable: Boolean = false
 ) {
     /**
      * Unique tdoll id, usually just the tdoll name with + appended to it if it's mod variant
@@ -59,8 +59,11 @@ data class TDoll(
          */
         fun lookup(config: Wai2KConfig, name: String?): TDoll? {
             if (name == null) return null
-            return listAll(config).find {
-                it.id == name || it.name.distanceTo(name, Ocr.OCR_DISTANCE_MAP) < config.scriptConfig.ocrThreshold
+            return listAll(config).find { it.id == name } ?: listAll(config).find {
+                var score = (name.length - it.name.distanceTo(name, Ocr.OCR_DISTANCE_MAP)) / name.length
+                // Be a bit more lax on longer names
+                if (name.length > 6) score *= 1.2
+                score > config.scriptConfig.ocrThreshold
             }
         }
     }
